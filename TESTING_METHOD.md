@@ -1,7 +1,7 @@
 ### Методика тестирования производительности PostgreSQL 17 на локальном и iSCSI-хранилище
-#### Версия: 1.1
-#### Дата: 22 октября 2025 г.
-#### Цель: Сравнить производительность дисковой подсистемы и СУБД PostgreSQL 17 при размещении ВМ на локальном RAID10 (Dell R750) и на внешнем iSCSI-СХД, подключённом по 25/100GbE в среде VMware vSphere 8.
+#### 	Версия: 1.1
+#### 	Дата: 22 октября 2025 г.
+#### 	Цель: Сравнить производительность дисковой подсистемы и СУБД PostgreSQL 17 при размещении ВМ на локальном RAID10 (Dell R750) и на внешнем iSCSI-СХД, подключённом по 25/100GbE в среде VMware vSphere 8.
 
 #### 1. Общие положения
 Тестирование проводится на одном хосте ESXi в кластере Т4 ДЦ ВКС.
@@ -34,6 +34,8 @@
 | Файловая система данных | XFS (noatime, logbufs=8, logbsize=256k) |
 | Swap | Отключён |
 | Сетевой адаптер | VMXNET3 |
+> Диск данных монтируется в /mnt/pgdata и используется как PGDATA
+
 
 #### 3. Подготовка ВМ
 ##### 3.1 Базовая настройка ОС
@@ -64,4 +66,58 @@ EOF
 
 sudo reboot
 ```
+
+##### 3.2 Настройка диска под PostgreSQL
+```bash
+sudo mkdir -p /mnt/pgdata
+echo '/dev/sdb /mnt/pgdata xfs defaults,noatime,logbufs=8,logbsize=256k 0 0' | sudo tee -a /etc/fstab
+sudo mount -a
+sudo chown postgres:postgres /mnt/pgdata
+```
+
+##### 3.3 Установка PostgreSQL 17
+```bash
+sudo systemctl stop postgresql
+
+# Инициализация на новом томе
+sudo -u postgres initdb -D /mnt/pgdata
+
+# Указать PGDATA
+sudo sed -i "s|data_directory = '.*'|data_directory = '/mnt/pgdata'|" /etc/postgresql/17/main/postgresql.conf
+
+# Добавить настройки производительности в /mnt/pgdata/postgresql.conf
+cat <<EOF | sudo tee -a /mnt/pgdata/postgresql.conf
+
+# === Performance Tuning ===
+shared_buffers = 4GB
+effective_cache_size = 12GB
+work_mem = 64MB
+maintenance_work_mem = 1GB
+
+wal_level = replica
+max_wal_size = 8GB
+min_wal_size = 2GB
+checkpoint_timeout = 30min
+checkpoint_completion_target = 0.9
+
+max_connections = 200
+max_worker_processes = 4
+max_parallel_workers_per_gather = 2
+max_parallel_workers = 4
+
+log_min_duration_statement = 1000
+log_statement = 'none'
+EOF
+
+# Разрешить подключения (только для тестов!)
+echo "local all all trust" | sudo tee /mnt/pgdata/pg_hba.conf
+echo "host all all 0.0.0.0/0 trust" | sudo tee -a /mnt/pgdata/pg_hba.conf
+
+sudo systemctl start postgresql@17-main
+sudo systemctl enable postgresql@17-main
+```
+
+> В Debian 12 служба PostgreSQL 17 называется postgresql@17-main
+
+
 
