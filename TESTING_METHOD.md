@@ -35,3 +35,33 @@
 | Swap | Отключён |
 | Сетевой адаптер | VMXNET3 |
 
+#### 3. Подготовка ВМ
+##### 3.1 Базовая настройка ОС
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y wget ca-certificates sysstat dstat htop xfsprogs
+
+# Отключение swap
+sudo swapoff -a
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+
+# Настройка ядра
+cat <<EOF | sudo tee -a /etc/sysctl.conf
+vm.swappiness = 1
+vm.overcommit_memory = 2
+kernel.shmmax = 4294967296
+kernel.shmall = 1048576
+EOF
+sudo sysctl -p
+
+# Лимиты
+cat <<EOF | sudo tee -a /etc/security/limits.conf
+* soft nofile 65536
+* hard nofile 65536
+postgres soft nofile 65536
+postgres hard nofile 65536
+EOF
+
+sudo reboot
+```
+
