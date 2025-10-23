@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 import argparse
 
-# Параметры по умолчанию
+# Параметры тестирования по умолчанию
 DEFAULT_SIZE = "10G"
 DEFAULT_BS = "4k"
 DEFAULT_MIX = "60"
