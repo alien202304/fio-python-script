@@ -127,11 +127,9 @@ EOF
 echo "local all all trust" | sudo tee /mnt/pgdata/pg_hba.conf
 echo "host all all 0.0.0.0/0 trust" | sudo tee -a /mnt/pgdata/pg_hba.conf
 
-sudo systemctl start postgresql@17-main
-sudo systemctl enable postgresql@17-main
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
 ```
-
-> В Debian 12 служба PostgreSQL 17 называется postgresql@17-main
 
 #### 4. План тестирования
 | Этап | Тип хранилища | Кол-во в тесте | Тип нагрузки | Кол-во повторов тестов |
