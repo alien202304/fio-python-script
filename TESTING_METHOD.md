@@ -76,7 +76,6 @@ sudo reboot
 sudo mkdir -p /mnt/pgdata
 echo '/dev/sdb /mnt/pgdata xfs defaults,noatime,logbufs=8,logbsize=256k 0 0' | sudo tee -a /etc/fstab
 sudo mount -a
-sudo chown postgres:postgres /mnt/pgdata
 ```
 
 ##### 3.3 Установка PostgreSQL 17
@@ -87,6 +86,7 @@ echo "deb https://apt.postgresql.org/pub/repos/apt/ bookworm-pgdg main" | sudo t
 
 sudo apt update
 sudo apt install -y postgresql-17 postgresql-client-17 postgresql-contrib-17
+sudo chown postgres:postgres /mnt/pgdata
 ```
 
 ##### 3.4 Настройка PostgreSQL 17
