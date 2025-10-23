@@ -123,8 +123,84 @@ sudo systemctl enable postgresql@17-main
 | Этап | Тип хранилища | Кол-во в тесте | Тип нагрузки | Кол-во повторов тестов |
 |:-----|:--------------|:---------------|:-------------|:-----------------------|
 |1 | Локальное | 1 | скрипт fio (60 сек) | 	3 |
-|2 | Локальное | 4 | скрипт fio (60 сек) | 3|
+|2 | Локальное | 4 | скрипт fio (параллельно 4 VM) | 3|
 |3 | Локальное | 1 | pgbench | 3 |
-|4 | Локальное | 4 | pgbench | 3 |
+|4 | Локальное | 4 | pgbench (параллельно 4 VM) | 3 |
+|5 | iSCSI | 1 | скрипт fio (60 сек) | 3 |
+|6 | iSCSI | 4 | скрипт fio (параллельно 4 VM) | 3 |
+|7 | iSCSI | 1 | pgbench | 3 |
+|8 | iSCSI | 4 | pgbench (параллельно 4 VM) | 3|
 
+> Перед каждым тестом выполняем команды:
+```bash
+sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"
+sudo systemctl restart postgresql@17-main
+```
 
+#### 5. Нагрузочные тесты
+##### 5.1 Использование утилиты fio в Python скрипте
+Используется скрипт test_fio_7.py с параметрами:
+
++ --runtime=60 --time_based
++ --rwmixwrite=60 (60% запись)
++ --size=10G, --bs=4k, --iodepth=64, --numjobs=4
++ --direct=1, --ioengine=libaio
+
+Профили тестирования утилитой fio:
+
++ Sequential Write / Read
++ Random Write / Read
++ Mixed RW (60/40)
+
+##### 5.2 Использование встроенного бенчмарка pgbench
+Инициализация:
+```bash
+pgbench -i -s 100 postgres
+```
+
+OLTP-тест:
+```bash
+pgbench -c 32 -j 4 -T 600 -P 30 postgres
+```
+
+Read-only:
+```bash
+pgbench -c 32 -j 4 -T 600 -S postgres
+```
+
+#### 6. Сбор метрик
+Для каждой VM:
+```bash
+dstat -tcmdsn --output /tmp/dstat_$(hostname)_$(date +%s).csv 5 &
+iostat -x 5 > /tmp/iostat_$(hostname)_$(date +%s).log &
+```
+
+На гипервизоре ESXi тестового хоста:
++ esxtop → %RDY, DAVG/cmd
+
+Из PostgreSQL:
+```sql
+SELECT * FROM pg_stat_wal;
+SELECT total_time, calls, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10;
+```
+
+#### 7. Миграция на iSCSI
+1. Создать iSCSI datastore на ESXi (MTU 9000, отдельный LUN).
+2. Выполнить Storage vMotion всех 4 ВМ.
+3. Повторить этапы 5–8 без изменений конфигурации.
+
+#### 8. Критерии оценки
+Производится сравнение полученных результатов по следующим метрикам:
+
+| Метрика | Источник |
+|:--------|:---------|
+| fio: IOPS, bandwidth, latency (avg, 95th, 99th) | test_fio_7.py |
+| pgbench: TPS, latency | stdout |
+| WAL latency | pg_stat_wal |
+| esxi latency | esxtop→ DAVG/cmd |
+
+#### 9. Шаблон CSV для результатов
+См. файл results_template.csv
+
+#### 10. Заключение
+Методика позволяет объективно оценить влияние типа хранилища на производительность PostgreSQL 17 в условиях реальной виртуальной нагрузки.
