@@ -81,6 +81,16 @@ sudo chown postgres:postgres /mnt/pgdata
 
 ##### 3.3 Установка PostgreSQL 17
 ```bash
+# Добавление официального репозитория
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+echo "deb https://apt.postgresql.org/pub/repos/apt/ bookworm-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+
+sudo apt update
+sudo apt install -y postgresql-17 postgresql-client-17 postgresql-contrib-17
+```
+
+##### 3.4 Настройка PostgreSQL 17
+```bash
 sudo systemctl stop postgresql
 
 # Инициализация на новом томе
