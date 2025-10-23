@@ -45,7 +45,7 @@
 ##### 3.1 Базовая настройка ОС
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y wget ca-certificates sysstat dstat htop xfsprogs
+sudo apt install -y wget ca-certificates sysstat dstat htop xfsprogs python3 fio
 
 # Отключение swap
 sudo swapoff -a
