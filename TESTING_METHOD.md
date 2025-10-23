@@ -140,6 +140,7 @@ sudo systemctl enable postgresql@17-main
 sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"
 sudo systemctl restart postgresql@17-main
 ```
+На локальном хранилище выполняются этапы 1-4, после миграции на сетевое хранилище iSCSI выполняются этапы 5-8 из плана тестирования.
 
 #### 5. Нагрузочные тесты
 ##### 5.1 Использование утилиты fio в Python скрипте
@@ -191,7 +192,7 @@ SELECT total_time, calls, mean_time FROM pg_stat_statements ORDER BY mean_time D
 #### 7. Миграция на iSCSI
 1. Создать iSCSI datastore на ESXi (MTU 9000, отдельный LUN).
 2. Выполнить Storage vMotion всех 4 ВМ.
-3. Повторить этапы 5–8 без изменений конфигурации.
+3. Выполнить этапы 5–8 без изменений конфигурации.
 
 #### 8. Критерии оценки
 Производится сравнение полученных результатов по следующим метрикам:
