@@ -123,12 +123,27 @@ log_min_duration_statement = 1000
 log_statement = 'none'
 EOF
 
+
+# Инициализируем кластер PostgreSQL
+sudo -u postgres /usr/lib/postgresql/17/bin/initdb -D /mnt/pgdata
+
+# Создаем override для службы
+sudo mkdir -p /etc/systemd/system/postgresql@17-main.service.d
+sudo vim /etc/systemd/system/postgresql@17-main.service.d/override.conf
+
+# Вставить в файл
+[Service]
+Environment=PGDATA=/mnt/pgdata
+
 # Разрешить подключения (только для тестов!)
 echo "local all all trust" | sudo tee /mnt/pgdata/pg_hba.conf
 echo "host all all 0.0.0.0/0 trust" | sudo tee -a /mnt/pgdata/pg_hba.conf
 
 sudo systemctl start postgresql@17-main
 sudo systemctl enable postgresql@17-main
+
+# Поверяем версию PostgreSQL
+sudo -u postgres psql -c "SELECT version();"
 ```
 
 #### 4. План тестирования
