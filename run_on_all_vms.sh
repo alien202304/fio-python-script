@@ -44,7 +44,7 @@ USER="testuser"  # ← замени, если нужно
 REMOTE_DIR="/home/$USER"
 
 # === 4. Формирование команды ===
-CMD="cd $REMOTE_DIR && python3 ./test_fio_5.py \
+CMD="cd $REMOTE_DIR && python3 ./test_fio_7.py \
   --test-name '$TEST_NAME' \
   --size '$SIZE' \
   --bs '$BS' \
