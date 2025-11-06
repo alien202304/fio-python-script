@@ -238,8 +238,32 @@ def parse_fio_results(file_path, is_mixed=False):
     except Exception as e:
         print(f"Ошибка чтения файла {file_path}: {str(e)}")
         return error_result()
+    
+def run_pgbench_test():
+    """Запускает pgbench и возвращает результаты"""
+    print("\n=== Запуск pgbench ===")
+    # Инициализация
+    init_cmd = ["pgbench", "-i", "-s100", "postgres"]
+    result = subprocess.run(init_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ Ошибка инициализации pgbench:\n{result.stderr}")
+        return None
+    # OLTP-тест
+    test_cmd = ["pgbench", "-c32", "-j4", "-T600", "-P30", "postgres"]
+    result = subprocess.run(test_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ Ошибка выполнения pgbench:\n{result.stderr}")
+        return None
+    # Парсинг
+    output = result.stdout
+    tps = re.search(r'tps = ([\d.]+)', output)
+    lat = re.search(r'latency average = ([\d.]+) ms', output)
+    return {
+        "TPS": tps.group(1) if tps else "N/A",
+        "Latency (ms)": lat.group(1) if lat else "N/A"
+    }
 
-def print_results_table(results, test_params, output_file=None):
+def print_results_table(results, test_params, pgbench_result=None, output_file=None):
     date_header = f"Дата и время теста: {test_params['start_time']}\n\n"
     
     params_section = "Параметры теста:\n"
@@ -314,6 +338,17 @@ def print_results_table(results, test_params, output_file=None):
                 if avg_lat != "N/A":
                     result["Latency (ms)"] = avg_lat
 
+    # === ДОБАВЛЕНО: ВЫВОД PG BENCH ===
+    if 'pgbench_result' in locals() or 'pgbench_result' in globals():
+        # Но лучше передавать как параметр — см. шаг 3
+        pass  # временно
+    
+    if pgbench_result:
+        full_output += "\n" + "="*60 + "\n"
+        full_output += "Результаты pgbench (OLTP):\n"
+        full_output += "="*60 + "\n"
+        full_output += f"TPS (Transactions Per Second): {pgbench_result['TPS']}\n"
+        full_output += f"Средняя задержка: {pgbench_result['Latency (ms)']} ms\n"
     print(f"\n{full_output}")
 
     if output_file:
@@ -437,11 +472,16 @@ def main():
             })
 
     total_time = time.time() - total_start_time
+
+    # === ДОБАВЛЕНО: ЗАПРОС И ЗАПУСК PG BENCH ===
+    pgbench_res = None
+    if input("\nЗапустить pgbench после fio? (y/N): ").strip().lower() in ('y', 'yes'):
+        pgbench_res = run_pgbench_test()
+
     test_suite_safe = re.sub(r'[^\w-]', '_', test_name).strip('_')[:50]
     results_sheet_path = os.path.join(results_dir, f"results_sheet_{test_suite_safe}.txt")
-
     if all_tests_passed:
-        print_results_table(results, test_params, output_file=results_sheet_path)
+        print_results_table(results, test_params, pgbench_result=pgbench_res, output_file=results_sheet_path)
         print(f"\nОбщее время выполнения всех тестов: {total_time:.2f} секунд.")
     else:
         print("\nНекоторые тесты завершились с ошибками. Итоговый отчет не сформирован.")
