@@ -177,6 +177,7 @@ sudo systemctl enable postgresql@17-main
 # Поверяем версию PostgreSQL
 sudo -u postgres psql -c "SELECT version();"
 ```
+Для автоматизации процесса деплоя PostgreSQL 17 кластера можно запустить скрипт `setup_postgresql_cluster.sh`
 
 #### 5. План тестирования
 | Этап | Тип хранилища | Кол-во в тесте | Тип нагрузки | Кол-во повторов тестов |
