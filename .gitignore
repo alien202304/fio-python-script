@@ -1,6 +1,6 @@
 # Результаты тестов
-/results_*/
-/fio_results_*/
+/control/results_*/
+/control/fio_results_*/
 /fio_log_*.log
 
 # Виртуальное окружение (на MacBook)
@@ -10,3 +10,4 @@
 *.tmp
 .DS_Store
 DC_test_diagram.drawio
+.$DC_test_diagram.drawio.bkp
