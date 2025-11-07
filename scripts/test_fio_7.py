@@ -367,10 +367,10 @@ def main():
     parser.add_argument('--mix', type=str, default=DEFAULT_MIX, help=f"Процент записи в RW (по умолчанию {DEFAULT_MIX})")
     parser.add_argument('--io-depth', type=int, default=DEFAULT_IO_DEPTH, help=f"Глубина очереди (по умолчанию {DEFAULT_IO_DEPTH})")
     parser.add_argument('--runtime', type=int, default=None, help="Время выполнения в секундах (опционально)")
-
+    parser.add_argument('--run-pgbench', action='store_true', help="Запустить pgbench после fio")
     args = parser.parse_args()
 
-    start_time_test = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    start_time_test = datetime.now().strftime("%Y-%mf-%d %H:%M:%S")
     home_dir = os.getenv("HOME")
     testfile_path = os.path.join(home_dir, 'testfile')
     results_dir = os.path.join(home_dir, 'results')
@@ -473,10 +473,15 @@ def main():
 
     total_time = time.time() - total_start_time
 
-    # === ДОБАВЛЕНО: ЗАПРОС И ЗАПУСК PG BENCH ===
+    # === Запуск pgbench: интерактивно ИЛИ автоматически ===
     pgbench_res = None
-    if input("\nЗапустить pgbench после fio? (y/N): ").strip().lower() in ('y', 'yes'):
+    if args.run_pgbench:
+        # Автоматический режим (из run_tests.sh)
         pgbench_res = run_pgbench_test()
+    elif args.test_name is None:
+        # Интерактивный режим (запуск вручную на ВМ)
+        if input("\nЗапустить pgbench после fio? (y/N): ").strip().lower() in ('y', 'yes'):
+            pgbench_res = run_pgbench_test()
 
     test_suite_safe = re.sub(r'[^\w-]', '_', test_name).strip('_')[:50]
     results_sheet_path = os.path.join(results_dir, f"results_sheet_{test_suite_safe}.txt")
