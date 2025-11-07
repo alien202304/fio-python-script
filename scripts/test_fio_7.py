@@ -242,6 +242,15 @@ def parse_fio_results(file_path, is_mixed=False):
 def run_pgbench_test():
     """Запускает pgbench и возвращает результаты"""
     print("\n=== Запуск pgbench ===")
+    # Проверка наличия pgbench
+    if subprocess.run(["which", "pgbench"], capture_output=True, text=True).returncode != 0:
+        print("❌ pgbench не установлен")
+        return None
+
+    # Проверка доступности БД
+    if subprocess.run(["psql", "-c", "SELECT 1"], capture_output=True, text=True).returncode != 0:
+        print("❌ PostgreSQL недоступен")
+        return None
     # Инициализация
     init_cmd = ["pgbench", "-i", "-s100", "postgres"]
     result = subprocess.run(init_cmd, capture_output=True, text=True)
@@ -370,7 +379,7 @@ def main():
     parser.add_argument('--run-pgbench', action='store_true', help="Запустить pgbench после fio")
     args = parser.parse_args()
 
-    start_time_test = datetime.now().strftime("%Y-%mf-%d %H:%M:%S")
+    start_time_test = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     home_dir = os.getenv("HOME")
     testfile_path = os.path.join(home_dir, 'testfile')
     results_dir = os.path.join(home_dir, 'results')
@@ -476,7 +485,7 @@ def main():
     # === Запуск pgbench: интерактивно ИЛИ автоматически ===
     pgbench_res = None
     if args.run_pgbench:
-        # Автоматический режим (из run_tests.sh)
+        # Автоматический запуск из run_tests.sh
         pgbench_res = run_pgbench_test()
     elif args.test_name is None:
         # Интерактивный режим (запуск вручную на ВМ)
