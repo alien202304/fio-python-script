@@ -88,23 +88,29 @@ for ip in "${VMS[@]}"; do
     fi
 done
 
+# === 5.1 Очистка старых результатов на ВМ ===
+echo -e "\n🧹 Очистка предыдущих результатов на ВМ..."
+for ip in "${VMS[@]}"; do
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        "$USER@$ip" "rm -rf $REMOTE_DIR/results/* $REMOTE_DIR/testfile* 2>/dev/null || true"
+    echo "  → Очищено: $ip"
+done
+
 # === 6. Формирование команды ===
-CMD=""
-if [ "$RUN_FIO" = true ]; then
-    CMD="cd $REMOTE_DIR && python3 ./test_fio_7.py \
-  --test-name '$TEST_NAME' \
-  --size '$SIZE' \
-  --bs '$BS' \
-  --mix '$MIX' \
-  --io-depth $IO_DEPTH \
-  --runtime $RUNTIME"
+CMD="cd $REMOTE_DIR && python3 ./test_fio_7.py"
+CMD="$CMD --test-name '$TEST_NAME'"
+CMD="$CMD --size '$SIZE'"
+CMD="$CMD --bs '$BS'"
+CMD="$CMD --mix '$MIX'"
+CMD="$CMD --io-depth $IO_DEPTH"
+CMD="$CMD --runtime $RUNTIME"
+if [ "$RUN_PG" = true ]; then
+    CMD="$CMD --run-pgbench"
 fi
 
 # Если выбран только pgbench — запускаем его отдельно
 if [ "$RUN_FIO" = false ] && [ "$RUN_PG" = true ]; then
-    CMD="cd $REMOTE_DIR && pgbench -i -s100 postgres && pgbench -c32 -j4 -T600 postgres"
-    # Сохраняем вывод pgbench в файл
-    CMD="$CMD > results/pgbench_output.txt 2>&1"
+    CMD="mkdir -p $REMOTE_DIR/results && cd $REMOTE_DIR && pgbench -i -s100 postgres && pgbench -c32 -j4 -T600 postgres > results/pgbench_output.txt 2>&1"
 fi
 
 # Если fio + pgbench — добавляем флаг (предполагается, что test_fio_7.py поддерживает --run-pgbench)
@@ -147,6 +153,19 @@ for ip in "${VMS[@]}"; do
             "$USER@$ip:$REMOTE_DIR/results/pgbench_output.txt" "$RESULTS_DIR/pgbench_$ip.txt" 2>/dev/null
     fi
 done
+# Сбор результатов pgbench
+if [ "$RUN_PG" = true ]; then
+    echo -e "\n📥 Сбор результатов pgbench..."
+    for ip in "${VMS[@]}"; do
+        # Проверяем, есть ли файл с результатами
+        if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            "$USER@$ip" "[ -f $REMOTE_DIR/results/pgbench_output.txt ]"; then
+            scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                "$USER@$ip:$REMOTE_DIR/results/pgbench_output.txt" "$RESULTS_DIR/pgbench_$ip.txt" 2>/dev/null
+            echo "  ← pgbench_$ip.txt"
+        fi
+    done
+fi
 
 echo -e "\n📁 Результаты сохранены в: ./$RESULTS_DIR/"
 ls -l "$RESULTS_DIR"
