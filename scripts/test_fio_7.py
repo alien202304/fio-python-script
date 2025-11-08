@@ -6,6 +6,7 @@ import os
 import time
 from datetime import datetime
 import argparse
+import sys
 
 # Параметры тестирования по умолчанию
 DEFAULT_SIZE = "10G"
