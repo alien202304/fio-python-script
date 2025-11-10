@@ -13,3 +13,5 @@
    ./control/run_tests.sh
    python3 control/tools/parse_results.py results/run_20251106_1200
    ```
+
+   <img src="docs/screenshots/Control_host_with_VM_interconnections.png" alt="Схема взаимодействия узлов" width="600"/>
