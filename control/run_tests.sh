@@ -97,31 +97,52 @@ for ip in "${VMS[@]}"; do
 done
 
 # === 6. Формирование команды ===
-CMD="cd $REMOTE_DIR && python3 ./test_fio_7.py"
-CMD="$CMD --test-name '$TEST_NAME'"
-CMD="$CMD --size '$SIZE'"
-CMD="$CMD --bs '$BS'"
-CMD="$CMD --mix '$MIX'"
-CMD="$CMD --io-depth $IO_DEPTH"
-CMD="$CMD --runtime $RUNTIME"
-# if [ "$RUN_PG" = true ]; then
-#     CMD="$CMD --run-pgbench"
-# fi
+CMD=""
 
-# Если выбран только pgbench — запускаем его отдельно
+# Случай 1: Только pgbench (без fio)
 if [ "$RUN_FIO" = false ] && [ "$RUN_PG" = true ]; then
-    CMD="mkdir -p $REMOTE_DIR/results && cd $REMOTE_DIR && pgbench -i -s100 postgres && pgbench -c32 -j4 -T600 postgres > results/pgbench_output.txt 2>&1"
+    echo "Режим: только pgbench"
+    CMD="mkdir -p $REMOTE_DIR/results && cd $REMOTE_DIR && sudo -u postgres pgbench -i -s100 postgres && sudo -u postgres pgbench -c32 -j4 -T600 -P30 postgres > results/pgbench_output.txt 2>&1"
 fi
 
-# Если fio + pgbench — добавляем флаг (предполагается, что test_fio_7.py поддерживает --run-pgbench)
+# Случай 2: Только fio (без pgbench)
+if [ "$RUN_FIO" = true ] && [ "$RUN_PG" = false ]; then
+    echo "Режим: только fio"
+    CMD="cd $REMOTE_DIR && python3 ./test_fio_7.py"
+    CMD="$CMD --test-name '$TEST_NAME'"
+    CMD="$CMD --size '$SIZE'"
+    CMD="$CMD --bs '$BS'"
+    CMD="$CMD --mix '$MIX'"
+    CMD="$CMD --io-depth $IO_DEPTH"
+    CMD="$CMD --runtime $RUNTIME"
+fi
+
+# Случай 3: fio + pgbench (оба теста)
 if [ "$RUN_FIO" = true ] && [ "$RUN_PG" = true ]; then
+    echo "Режим: fio + pgbench"
+    CMD="cd $REMOTE_DIR && python3 ./test_fio_7.py"
+    CMD="$CMD --test-name '$TEST_NAME'"
+    CMD="$CMD --size '$SIZE'"
+    CMD="$CMD --bs '$BS'"
+    CMD="$CMD --mix '$MIX'"
+    CMD="$CMD --io-depth $IO_DEPTH"
+    CMD="$CMD --runtime $RUNTIME"
     CMD="$CMD --run-pgbench"
 fi
+
+# Проверка, что команда сформирована
+if [ -z "$CMD" ]; then
+    echo "❌ Ошибка: не удалось сформировать команду запуска"
+    exit 1
+fi
+
+echo "Команда для выполнения: $CMD"
 
 # === 7. Запуск с прогресс-баром ===
 echo -e "\n🚀 Запуск тестов на ${#VMS[@]} ВМ..."
 PIDS=()
 for ip in "${VMS[@]}"; do
+    echo "  → Запуск на $ip"
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
         "$USER@$ip" "$CMD" > "fio_log_$ip.log" 2>&1 &
     PIDS+=($!)
@@ -141,31 +162,49 @@ RESULTS_DIR="results/$(date +%Y%m%d_%H%M)_test"
 mkdir -p "$RESULTS_DIR"
 
 echo -e "\n⬇️ Сбор результатов..."
-for ip in "${VMS[@]}"; do
-    echo "  ← $ip"
-    # Собираем папку results/ ИЛИ pgbench_output.txt
-    if [ "$RUN_FIO" = true ]; then
+
+# Сбор результатов fio
+if [ "$RUN_FIO" = true ]; then
+    echo "📥 Сбор результатов fio..."
+    for ip in "${VMS[@]}"; do
+        echo "  ← $ip"
         scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -r "$USER@$ip:$REMOTE_DIR/results/" "$RESULTS_DIR/results_$ip/" 2>/dev/null
-    fi
-    if [ "$RUN_PG" = true ] && [ "$RUN_FIO" = false ]; then
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            "$USER@$ip:$REMOTE_DIR/results/pgbench_output.txt" "$RESULTS_DIR/pgbench_$ip.txt" 2>/dev/null
-    fi
-done
+            -r "$USER@$ip:$REMOTE_DIR/results/" "$RESULTS_DIR/results_$ip/" 2>/dev/null || echo "  ⚠️ Не удалось скопировать с $ip"
+    done
+fi
+
 # Сбор результатов pgbench
 if [ "$RUN_PG" = true ]; then
-    echo -e "\n📥 Сбор результатов pgbench..."
+    echo "📥 Сбор результатов pgbench..."
     for ip in "${VMS[@]}"; do
-        # Проверяем, есть ли файл с результатами
-        if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            "$USER@$ip" "[ -f $REMOTE_DIR/results/pgbench_output.txt ]"; then
-            scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-                "$USER@$ip:$REMOTE_DIR/results/pgbench_output.txt" "$RESULTS_DIR/pgbench_$ip.txt" 2>/dev/null
-            echo "  ← pgbench_$ip.txt"
+        # Если pgbench запускался отдельно
+        if [ "$RUN_FIO" = false ]; then
+            if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                "$USER@$ip" "[ -f $REMOTE_DIR/results/pgbench_output.txt ]" 2>/dev/null; then
+                scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    "$USER@$ip:$REMOTE_DIR/results/pgbench_output.txt" "$RESULTS_DIR/pgbench_$ip.txt" 2>/dev/null
+                echo "  ← pgbench_$ip.txt"
+            else
+                echo "  ⚠️ Файл pgbench_output.txt не найден на $ip"
+            fi
+        else
+            # Если pgbench был частью python скрипта, результаты уже в results_sheet
+            echo "  → Результаты pgbench включены в results_sheet_*.txt"
         fi
     done
 fi
 
+# Копирование логов выполнения
+echo "📋 Копирование логов выполнения..."
+for ip in "${VMS[@]}"; do
+    if [ -f "fio_log_$ip.log" ]; then
+        cp "fio_log_$ip.log" "$RESULTS_DIR/"
+        echo "  → fio_log_$ip.log"
+    fi
+done
+
 echo -e "\n📁 Результаты сохранены в: ./$RESULTS_DIR/"
-ls -l "$RESULTS_DIR"
+echo "Содержимое:"
+ls -lh "$RESULTS_DIR"
+
+echo -e "\n✅ Готово! Проверьте файлы results_sheet_*.txt для просмотра результатов."
