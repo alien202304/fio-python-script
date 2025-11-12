@@ -488,8 +488,8 @@ def main():
     if args.run_pgbench:
         # Автоматический запуск из run_tests.sh
         pgbench_res = run_pgbench_test()
-    elif args.test_name is None:
-        # Интерактивный режим (запуск вручную на ВМ)
+    elif args.test_name is None or sys.stdin.isatty():
+        # Интерактивный режим (без параметров или с параметрами, но в TTY)
         if input("\nЗапустить pgbench после fio? (y/N): ").strip().lower() in ('y', 'yes'):
             pgbench_res = run_pgbench_test()
 
