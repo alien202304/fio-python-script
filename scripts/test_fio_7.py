@@ -301,22 +301,54 @@ def run_pgbench_test():
     
     # Парсинг
     output = result.stdout
-    tps = re.search(r'tps = ([\d.]+)', output)
-    lat = re.search(r'latency average = ([\d.]+) ms', output)
     
-    if not tps or not lat:
-        print("⚠️  Не удалось распарсить результаты pgbench")
+    # Основные метрики
+    tps = re.search(r'tps = ([\d.]+)', output)
+    lat_avg = re.search(r'latency average = ([\d.]+) ms', output)
+    lat_stddev = re.search(r'latency stddev = ([\d.]+) ms', output)
+    
+    # Перцентили (если есть флаг --latency-limit или детальный вывод)
+    percentiles = {}
+    for p in [50, 90, 95, 99]:
+        match = re.search(rf'latency {p}th percentile = ([\d.]+) ms', output)
+        if match:
+            percentiles[f'{p}th'] = match.group(1)
+    
+    # Транзакции
+    transactions = re.search(r'number of transactions actually processed: (\d+)', output)
+    failed = re.search(r'number of failed transactions: (\d+)', output)
+    
+    # Scaling factor и клиенты
+    scaling = re.search(r'scaling factor: (\d+)', output)
+    clients = re.search(r'number of clients: (\d+)', output)
+    
+    # Время подключения
+    conn_time = re.search(r'initial connection time = ([\d.]+) ms', output)
+    
+    if not tps or not lat_avg:
+        print("⚠️  Не удалось распарсить основные результаты pgbench")
         print(f"Полный вывод:\n{output}")
         return None
     
     pgbench_result = {
         "TPS": tps.group(1) if tps else "N/A",
-        "Latency (ms)": lat.group(1) if lat else "N/A"
+        "Latency Avg (ms)": lat_avg.group(1) if lat_avg else "N/A",
+        "Latency Stddev (ms)": lat_stddev.group(1) if lat_stddev else "N/A",
+        "Transactions Processed": transactions.group(1) if transactions else "N/A",
+        "Failed Transactions": failed.group(1) if failed else "N/A",
+        "Scaling Factor": scaling.group(1) if scaling else "N/A",
+        "Clients": clients.group(1) if clients else "N/A",
+        "Connection Time (ms)": conn_time.group(1) if conn_time else "N/A",
+        "Percentiles": percentiles if percentiles else None
     }
     
     print("\n✓ Тест pgbench завершен успешно")
     print(f"  TPS: {pgbench_result['TPS']}")
-    print(f"  Средняя задержка: {pgbench_result['Latency (ms)']} ms")
+    print(f"  Средняя задержка: {pgbench_result['Latency Avg (ms)']} ms")
+    print(f"  Стандартное отклонение: {pgbench_result['Latency Stddev (ms)']} ms")
+    print(f"  Обработано транзакций: {pgbench_result['Transactions Processed']}")
+    if pgbench_result['Percentiles']:
+        print(f"  Перцентили: {pgbench_result['Percentiles']}")
     
     return pgbench_result
 
@@ -401,7 +433,18 @@ def print_results_table(results, test_params, pgbench_result=None, output_file=N
         full_output += "Результаты pgbench (OLTP):\n"
         full_output += "="*60 + "\n"
         full_output += f"TPS (Transactions Per Second): {pgbench_result['TPS']}\n"
-        full_output += f"Средняя задержка: {pgbench_result['Latency (ms)']} ms\n"
+        full_output += f"Средняя задержка: {pgbench_result['Latency Avg (ms)']} ms\n"
+        full_output += f"Стандартное отклонение задержки: {pgbench_result['Latency Stddev (ms)']} ms\n"
+        full_output += f"Обработано транзакций: {pgbench_result['Transactions Processed']}\n"
+        full_output += f"Неудачных транзакций: {pgbench_result['Failed Transactions']}\n"
+        full_output += f"Масштаб базы данных: {pgbench_result['Scaling Factor']}\n"
+        full_output += f"Количество клиентов: {pgbench_result['Clients']}\n"
+        full_output += f"Время начального подключения: {pgbench_result['Connection Time (ms)']} ms\n"
+        
+        if pgbench_result.get('Percentiles'):
+            full_output += "\nПерцентили задержки:\n"
+            for percentile, value in pgbench_result['Percentiles'].items():
+                full_output += f"  {percentile}: {value} ms\n"
     else:
         full_output += "\n" + "="*60 + "\n"
         full_output += "pgbench: Тест не запускался или завершился с ошибкой\n"
