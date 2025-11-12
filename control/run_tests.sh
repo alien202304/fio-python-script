@@ -104,9 +104,9 @@ CMD="$CMD --bs '$BS'"
 CMD="$CMD --mix '$MIX'"
 CMD="$CMD --io-depth $IO_DEPTH"
 CMD="$CMD --runtime $RUNTIME"
-if [ "$RUN_PG" = true ]; then
-    CMD="$CMD --run-pgbench"
-fi
+# if [ "$RUN_PG" = true ]; then
+#     CMD="$CMD --run-pgbench"
+# fi
 
 # Если выбран только pgbench — запускаем его отдельно
 if [ "$RUN_FIO" = false ] && [ "$RUN_PG" = true ]; then
