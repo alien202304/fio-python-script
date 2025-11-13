@@ -162,6 +162,8 @@ def aggregate_results(results_dir):
             'Latency_Avg_stdev': stdev(pgbench_metrics['Latency_Avg']) if len(pgbench_metrics['Latency_Avg']) > 1 else 0,
             'samples': len(pgbench_metrics['TPS'])
         }
+    else:
+        print("⚠️  Нет результатов pgbench для агрегации")
     
     return aggregated
 
@@ -204,6 +206,13 @@ def generate_report(aggregated, output_file):
         report.append(f"TPS (Transactions Per Second): {pg['TPS_mean']:.2f} ± {pg['TPS_stdev']:.2f}")
         report.append(f"Средняя задержка: {pg['Latency_Avg_mean']:.3f} ± {pg['Latency_Avg_stdev']:.3f} ms")
         report.append(f"Количество измерений: {pg['samples']}")
+        report.append("")
+    else:
+        report.append("="*80)
+        report.append("pgbench - Тестирование PostgreSQL OLTP")
+        report.append("="*80)
+        report.append("")
+        report.append("⚠️  Результаты pgbench отсутствуют (тест не запускался или не был включен)")
         report.append("")
     
     report.append("="*80)
