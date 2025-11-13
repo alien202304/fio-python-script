@@ -72,7 +72,8 @@
 
    # Визуализируем сравнение
    python3 visualize_results.py results/*/aggregated_report.json
-```
+   ```
+
 5. Полученные результаты:
    + Визуализированные графики будут сохранены в `visualization_output/`
    + Отчеты агрегированных данных будут в `results/*/aggregated_report.*`
@@ -83,5 +84,6 @@
    + Сравнить производительность различных конфигураций
    + Проанализировать масштабируемость системы при увеличении числа ВМ
    + Выявить оптимальную конфигурацию хранилища для PostgreSQL
+   
 
    <img src="docs/screenshots/Control_host_with_VM_interconnections.png" alt="Схема взаимодействия узлов" width="600"/>
