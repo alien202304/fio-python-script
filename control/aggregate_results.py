@@ -59,24 +59,55 @@ def aggregate_results(results_dir):
     # Поиск всех файлов results_sheet
     iterations_data = {}
     
-    for subdir in results_dir.iterdir():
-        if not subdir.is_dir():
-            continue
+    # Ищем файлы напрямую и в поддиректориях
+    all_result_files = list(results_dir.glob('**/results_sheet_*.txt'))
+    
+    if not all_result_files:
+        print("❌ Не найдено файлов results_sheet_*.txt")
+        return None
+    
+    print(f"Найдено {len(all_result_files)} файлов результатов:")
+    
+    for file in all_result_files:
+        print(f"  • {file.relative_to(results_dir)}")
         
-        # Ищем файлы results_sheet в поддиректориях
-        for file in subdir.glob('results_sheet_*.txt'):
-            # Извлекаем номер итерации из имени директории
-            iter_match = re.search(r'iter(\d+)', str(subdir))
+        # Извлекаем номер итерации из пути к файлу или из имени директории
+        iter_num = None
+        
+        # Попытка 1: из имени директории (iter1, iter2, etc.)
+        for parent in file.parents:
+            iter_match = re.search(r'iter(\d+)', parent.name)
             if iter_match:
                 iter_num = int(iter_match.group(1))
-                parsed = parse_results_sheet(file)
-                if parsed:
-                    if iter_num not in iterations_data:
-                        iterations_data[iter_num] = []
-                    iterations_data[iter_num].append(parsed)
+                break
+        
+        # Попытка 2: из имени файла (если содержит iter)
+        if iter_num is None:
+            iter_match = re.search(r'iter(\d+)', file.name)
+            if iter_match:
+                iter_num = int(iter_match.group(1))
+        
+        # Попытка 3: по timestamp (группируем по времени)
+        if iter_num is None:
+            # Если нет явного номера итерации, используем timestamp как идентификатор
+            timestamp_match = re.search(r'(\d{8}_\d{6})', file.name)
+            if timestamp_match:
+                # Создаем псевдо-номер итерации на основе хэша timestamp
+                timestamp = timestamp_match.group(1)
+                iter_num = hash(timestamp) % 1000  # Используем хэш для уникальности
+        
+        # По умолчанию - итерация 1
+        if iter_num is None:
+            iter_num = 1
+        
+        parsed = parse_results_sheet(file)
+        if parsed:
+            if iter_num not in iterations_data:
+                iterations_data[iter_num] = []
+            iterations_data[iter_num].append(parsed)
     
     if not iterations_data:
-        print("❌ Не найдено результатов для агрегации")
+        print("❌ Не удалось распарсить результаты")
         return None
     
     # Агрегация по итерациям
