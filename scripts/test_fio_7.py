@@ -587,7 +587,8 @@ def main():
                 pgbench_res = run_pgbench_test()
 
     test_suite_safe = re.sub(r'[^\w-]', '_', test_name).strip('_')[:50]
-    results_sheet_path = os.path.join(results_dir, f"results_sheet_{test_suite_safe}.txt")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_sheet_path = os.path.join(results_dir, f"results_sheet_{test_suite_safe}_{timestamp}.txt")
     if all_tests_passed:
         print_results_table(results, test_params, pgbench_result=pgbench_res, output_file=results_sheet_path)
         print(f"\nОбщее время выполнения всех тестов: {total_time:.2f} секунд.")
