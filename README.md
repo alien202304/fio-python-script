@@ -47,40 +47,41 @@
       + Анализ масштабируемости при увеличении количества ВМ
 
 4. Пример полного workflow:
-```bash
-# Тест на хранилище 1 (1 ВМ, 3 итерации)
-./control/run_tests.sh
-# → выбрать 1 ВМ, 3 итерации
+   ```bash
+   # Тест на хранилище 1 (1 ВМ, 3 итерации)
+   ./control/run_tests.sh
+   # → выбрать 1 ВМ, 3 итерации
 
-# Тест на хранилище 1 (2 ВМ, 3 итерации)
-./control/run_tests.sh
-# → выбрать 2 ВМ, 3 итерации
+   # Тест на хранилище 1 (2 ВМ, 3 итерации)
+   ./control/run_tests.sh
+   # → выбрать 2 ВМ, 3 итерации
 
-# Тест на хранилище 1 (4 ВМ, 3 итерации)
-./control/run_tests.sh
-# → выбрать 4 ВМ, 3 итерации
+   # Тест на хранилище 1 (4 ВМ, 3 итерации)
+   ./control/run_tests.sh
+   # → выбрать 4 ВМ, 3 итерации
 
-# Переносим ВМ на хранилище 2
-# Повторяем тесты...
+   # Переносим ВМ на хранилище 2
+   # Повторяем тесты...
 
-# Агрегируем все результаты
-python3 aggregate_results.py results/20251107_1430_storage1_1VM_3iter
-python3 aggregate_results.py results/20251107_1500_storage1_2VMs_3iter
-python3 aggregate_results.py results/20251107_1530_storage1_4VMs_3iter
-python3 aggregate_results.py results/20251107_1600_storage2_1VM_3iter
-# ... и так далее для всех тестов
+   # Агрегируем все результаты
+   python3 aggregate_results.py results/20251107_1430_storage1_1VM_3iter
+   python3 aggregate_results.py results/20251107_1500_storage1_2VMs_3iter
+   python3 aggregate_results.py results/20251107_1530_storage1_4VMs_3iter
+   python3 aggregate_results.py results/20251107_1600_storage2_1VM_3iter
+   # ... и так далее для всех тестов
 
-# Визуализируем сравнение
-python3 visualize_results.py results/*/aggregated_report.json
+   # Визуализируем сравнение
+   python3 visualize_results.py results/*/aggregated_report.json
 ```
 5. Полученные результаты:
-   + Визуализированные графики будут сохранены в visualization_output/
-   + Отчеты агрегированных данных будут в results/*/aggregated_report.*
-   + Оригинальные данные тестов останутся в подпапках results/
+   + Визуализированные графики будут сохранены в `visualization_output/`
+   + Отчеты агрегированных данных будут в `results/*/aggregated_report.*`
+   + Оригинальные данные тестов останутся в подпапках `results/`
+
 Этот процесс позволяет:
    + Получить статистически значимые результаты через многократные итерации
    + Сравнить производительность различных конфигураций
    + Проанализировать масштабируемость системы при увеличении числа ВМ
    + Выявить оптимальную конфигурацию хранилища для PostgreSQL
-   
+
    <img src="docs/screenshots/Control_host_with_VM_interconnections.png" alt="Схема взаимодействия узлов" width="600"/>
