@@ -287,7 +287,240 @@ SELECT total_time, calls, mean_time FROM pg_stat_statements ORDER BY mean_time D
   + Thin provisioning: отключено (для предсказуемой производительности)
 
 ### 8.3. Выполнение Storage vMotion всех ВМ на iSCSI datastore
+#### 8.3.1. Подготовка iSCSI-инфраструктуры
+Настройка сети iSCSI
+1. Создание отдельной VLAN для iSCSI-трафика:
++ В vCenter: Networking → Distributed Switch → Create Distributed Port Group
++ Назначение: "iSCSI-VLAN"
++ VLAN ID: выделенный ID для iSCSI-трафика
++ Security: Promiscuous mode - Reject, MAC address changes - Accept, Forged transmits - Accept
+
+2. Настройка jumbo frames (MTU 9000):
+```bash
+# На ESXi хосте
+esxcli network ip interface set -m 9000 -i vmkX
+```
+
++ Проверка настройки:
+
+```bash
+esxcli network ip interface list | grep -A 5 "vmkX"
+```
+
+3. Конфигурация сетевых адаптеров:
+
++ Выделение минимум 2x10GbE сетевых адаптеров на хост для iSCSI
++ Привязка к отдельному vSwitch или port group
++ Настройка NIC teaming: Route based on IP hash
+
+Конфигурация СХД
+
+1. Создание выделенного LUN:
++ Размер: минимум 800 ГБ (200 ГБ на ВМ × 4 ВМ + 20% запаса)
++ Тип тома: thin/thick provisioning согласно рекомендациям производителя СХД
++ QoS: приоритет для тестовых ВМ (если поддерживается)
+2. Настройка CHAP-аутентификации:
++ Mutual CHAP для безопасности
++ Использование надежных паролей (32+ символа)
+
+```bash
+# Пример для Dell PowerStore
+storage config iscsi -enable true -chap true -mutual_chap true
+```
+
+3. Проверка производительности СХД перед интеграцией:
+```bash
+# На отдельном сервере для тестирования
+iperf3 -c <ip_схд> -t 60 -i 5 -P 8 -b 0
+fio --name=test --filename=/dev/disk/by-id/<lun_id> \
+    --size=100G --rw=randwrite --bs=4k --direct=1 \
+    --ioengine=libaio --iodepth=64 --numjobs=8 --runtime=300
+```
+
+Добавление iSCSI-адаптера в vSphere
+
+1. Добавление программного iSCSI-адаптера:
++ vCenter → Host → Configure → Storage Adapters → Add software iSCSI adapter
++ Имя адаптера: "iscsi-adapter-storage-test"
++ CHAP Settings: Configure CHAP credentials
+
+2. Привязка к сетевым vmkernel-адаптерам:
++ vCenter → Host → Configure → Networking → VMkernel adapters
++ Создание двух vmk адаптеров (vmk1, vmk2) для отказоустойчивости
++ Привязка к iSCSI-адаптеру: Storage Adapters → Select adapter → Bind VMkernel adapters
+
+#### 8.3.2. Процедура Storage vMotion
+
+1. Подготовка ВМ к миграции:
++ Создание snapshot перед миграцией (на случай отката)
+```bash
+# Через PowerCLI
+Get-VM test-vm1 | New-Snapshot -Name "Pre-iSCSI-migration" -Description "Backup before Storage vMotion"
+```
+
++ Остановка некритичных служб для минимизации нагрузки:
+```bash
+sudo systemctl stop sysstat
+sudo systemctl stop rsyslog
+```
+
+2. Выполнение Storage vMotion:
++ В vCenter: Правой кнопкой на ВМ → Migrate → Change storage only
++ Target datastore: выбираем iSCSI datastore
++ Disk format: Thick Provision Lazy Zeroed
++ Priority: Low priority (чтобы не повлиять на производительность во время переноса)
++ Запуск миграции для ВМ поочередно (не более 2 одновременно)
+
+3. Мониторинг процесса:
++ В vCenter: Monitor → Tasks & Events
++ На СХД: мониторинг нагрузки через веб-интерфейс или CLI
++ На сетевом оборудовании: проверка загрузки портов через monitoring систему
++ Расчетное время миграции: объем данных (4 ВМ × 80 ГБ) / пропускная способность сети
+
+#### 8.3.3. Валидация после миграции
+
+1. Проверка целостности ВМ:
+```bash
+# На ESXi хосте
+vim-cmd vmsvc/getallvms | grep test-vm
+vim-cmd vmsvc/get.summary <vmid> | grep powerState
+```
+
+2. Проверка расположения VMDK-файлов:
++ В vCenter: VM → Summary → Hard disks — убедиться, что файлы находятся на iSCSI datastore
++ На хосте ESXi:
+```bash
+ls -la /vmfs/volumes/<iscsi_datastore_name>/test-vm1/
+```
+
+3. Проверка производительности базового уровня:
+```bash
+# На ВМ
+dd if=/dev/zero of=/tmp/testfile bs=1M count=1024 oflag=direct
+sync
+rm /tmp/testfile
+```
+
+
 ### 8.4. Проверка работоспособности и производительности перед запуском тестов
+#### 8.4.1. Базовая проверка работоспособности
+
+1. Проверка сетевой доступности:
+```bash
+# С контрольного хоста
+ping -c 4 10.85.105.181
+ssh -o ConnectTimeout=5 testuser@10.85.105.181 'echo "SSH connection OK"'
+nc -zv 10.85.105.181 5432
+```
+
+2. Проверка PostgreSQL:
+```bash
+# На тестовой ВМ
+sudo systemctl status postgresql@17-main --no-pager
+sudo -u postgres psql -c "\l"
+sudo -u postgres psql -c "SELECT pg_is_in_recovery();"
+sudo -u postgres psql -c "SELECT * FROM pg_stat_activity LIMIT 1;"
+```
+
+3. Проверка дисковой подсистемы:
+```bash
+df -hT /mnt/pgdata
+ls -la /mnt/pgdata
+xfs_info /mnt/pgdata
+mount | grep pgdata
+```
+
+#### 8.4.2. Проверка функциональности
+
+1. Тестовая запись в PostgreSQL:
+```bash
+sudo -u postgres psql -c "CREATE DATABASE test_db;"
+sudo -u postgres psql -c "CREATE TABLE test_table(id SERIAL PRIMARY KEY, data TEXT);" -d test_db
+sudo -u postgres psql -c "INSERT INTO test_table(data) VALUES ('test');" -d test_db
+sudo -u postgres psql -c "SELECT COUNT(*) FROM test_table;" -d test_db
+sudo -u postgres psql -c "DROP DATABASE test_db;"
+```
+
+2. Проверка прав доступа для pgbench:
+```bash
+sudo -u postgres pgbench --version
+sudo -u postgres pgbench -i -s1 test_db
+sudo -u postgres pgbench -c2 -T10 test_db
+sudo -u postgres dropdb test_db
+```
+
+#### 8.4.3. Предварительная оценка производительности
+
+1. Быстрый тест fio:
+```bash
+sudo -u postgres fio --name=quick-test --filename=/mnt/pgdata/quicktest \
+    --size=1G --rw=randwrite --bs=4k --direct=1 \
+    --ioengine=libaio --iodepth=1 --runtime=10 --time_based
+```
+
+2. Проверка сетевой задержки до СХД:
+```bash
+# На ESXi хосте
+vmkping -I vmk1 <ip_схд> -c 100 -s 8972 -d
+```
+
+3. Проверка стабильности соединения:
+```bash
+sudo apt install mtr -y
+mtr -c 100 <ip_схд> --report
+```
+
+#### 8.4.4. Финальная валидация
+
+1. Выполнение скриптов проверки:
+```bash
+./scripts/verify_test_env.sh
+```
+
++ Скрипт должен вернуть:
+```bash
+✅ Служба активна
+✅ data_directory = /mnt/pgdata
+✅ Версия 17.x
+✅ shared_buffers = 4GB
+✅ effective_cache_size = 12GB
+✅ max_connections = 200
+✅ listen_addresses = '*'
+✅ Владелец /mnt/pg postgres:postgres
+✅ Файловая система: XFS
+✅ Подключение без пароля
+✅ Тест записи успешен
+
+🎉 ВСЁ ГОТОВО К ТЕСТИРОВАНИЮ!
+```
+
+2. Проверка параметров ядра:
+```bash
+sysctl vm.swappiness vm.overcommit_memory vm.dirty_ratio
+```
+
++ Ожидаемый вывод:
+```bash
+vm.swappiness = 1
+vm.overcommit_memory = 2
+vm.dirty_ratio = 15
+```
+
+3. Проверка кэшей и загрузки системы:
+```bash
+free -h
+uptime
+sudo iostat -x 1 3
+```
+
+4. Финальная очистка перед тестированием:
+```bash
+sudo sync
+sudo sh -c "echo 3 > /proc/sys/vm/drop_caches"
+sudo systemctl restart postgresql@17-main
+sudo rm -f /mnt/pgdata/quicktest*
+```
+Только после успешного прохождения всех этих проверок можно приступать к выполнению основных тестов (этапы 5-8 плана тестирования). Это гарантирует, что полученные результаты будут объективными и не будут искажены проблемами с конфигурацией или доступностью ресурсов.
 
 ## 9. Обработка и анализ результатов
 
